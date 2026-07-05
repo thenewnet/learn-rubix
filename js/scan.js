@@ -74,12 +74,16 @@ function quadMapper(p0, p1, p2, p3) {
 function sampleQuad(ctx, quad, n) {
   const [A, B, C, D] = quad;
   const map = quadMapper(A, B, C, D);
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const rad = 5;
   const grid = [];
   for (let r = 0; r < n; r++) {
     const row = [];
     for (let c = 0; c < n; c++) {
-      const [x, y] = map((c + 0.5) / n, (r + 0.5) / n);
-      const rad = 5;
+      let [x, y] = map((c + 0.5) / n, (r + 0.5) / n);
+      // keep the sample window fully inside the canvas so getImageData never throws
+      x = Math.max(rad, Math.min(W - rad, Number.isFinite(x) ? x : W / 2));
+      y = Math.max(rad, Math.min(H - rad, Number.isFinite(y) ? y : H / 2));
       const data = ctx.getImageData(x - rad, y - rad, rad * 2, rad * 2).data;
       // median-ish: average, which is fine for solid stickers
       let R = 0, G = 0, Bl = 0, cnt = 0;

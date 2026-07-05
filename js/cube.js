@@ -256,15 +256,19 @@ export function layersForToken(token, n) {
 
 export const AXIS_TO_INDEX = AXIS_INDEX;
 
-// Human-readable name for a move token (for the step list / tooltips).
+// Human-readable (Vietnamese) name for a move token — for the step list / tooltips.
 export function moveName(token) {
   const face = token[0];
-  const names = { U: 'Up', D: 'Down', R: 'Right', L: 'Left', F: 'Front', B: 'Back' };
-  let dir = 'clockwise';
-  if (token.endsWith("'")) dir = 'counter-clockwise';
-  else if (token.endsWith('2')) dir = '180°';
-  return `${names[face]} ${dir}`;
+  const names = { U: 'Mặt trên', D: 'Mặt dưới', R: 'Mặt phải', L: 'Mặt trái', F: 'Mặt trước', B: 'Mặt sau' };
+  const wide = token.includes('w') ? ' (2 tầng)' : '';
+  let dir = 'cùng chiều kim đồng hồ';
+  if (token.endsWith("'")) dir = 'ngược chiều kim đồng hồ';
+  else if (token.endsWith('2')) dir = 'nửa vòng (180°)';
+  return `${names[face]}${wide} ${dir}`;
 }
+
+// Vietnamese colour names, keyed by the internal colour letters.
+export const COLOR_NAME_VI = { W: 'Trắng', Y: 'Vàng', R: 'Đỏ', O: 'Cam', G: 'Xanh lá', B: 'Xanh dương' };
 
 // Row/column axis orientation for each face when unfolding into a 2D net.
 const NET_ORIENT = {
@@ -354,23 +358,24 @@ export function buildFromFacelets(n, facelets) {
 
 // Validate a facelet map. Returns { ok, reason } or { ok:true, cube }.
 export function validateFacelets(n, facelets) {
+  const cn = (k) => COLOR_NAME_VI[k] || k;
   const counts = {};
   for (const f of FACE_LETTERS) {
     for (const row of facelets[f]) {
       for (const col of row) {
-        if (!col) return { ok: false, reason: 'Some stickers still need a colour.' };
+        if (!col) return { ok: false, reason: 'Vẫn còn ô chưa chọn màu.' };
         counts[col] = (counts[col] || 0) + 1;
       }
     }
   }
   for (const k of Object.keys(counts)) {
-    if (counts[k] !== n * n) return { ok: false, reason: `Colour “${k}” is used ${counts[k]}× — each colour needs exactly ${n * n}.` };
+    if (counts[k] !== n * n) return { ok: false, reason: `Màu ${cn(k)} đang có ${counts[k]} ô — mỗi màu phải đúng ${n * n} ô.` };
   }
   const mid = Math.floor(n / 2);
   const centers = FACE_LETTERS.map((f) => facelets[f][mid][mid]);
-  if (new Set(centers).size !== 6) return { ok: false, reason: 'The six centre colours must all be different.' };
+  if (new Set(centers).size !== 6) return { ok: false, reason: 'Sáu màu tâm phải khác nhau.' };
   const cube = buildFromFacelets(n, facelets);
-  if (!cube) return { ok: false, reason: 'These stickers don’t form a real cube — re-check the colours.' };
+  if (!cube) return { ok: false, reason: 'Các ô này không tạo thành khối hợp lệ — hãy kiểm tra lại màu.' };
   return { ok: true, cube };
 }
 

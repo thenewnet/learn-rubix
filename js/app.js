@@ -10,6 +10,17 @@ import { detectGrid, sampleCornerHex, samplePoints, hexVertices, rotateGrid } fr
 
 const $ = (s) => document.querySelector(s);
 
+// Vietnamese names for the solver's phases (the solver keeps English keys).
+const PHASES_VI = {
+  'Bottom cross': 'Thập tự đáy',
+  'Bottom corners': 'Góc tầng đáy',
+  'Middle layer': 'Tầng giữa',
+  'Top cross': 'Thập tự đỉnh',
+  'Orient top corners': 'Xoay hướng góc đỉnh',
+  'Place top corners': 'Đặt vị trí góc đỉnh',
+  'Finish top edges': 'Hoàn tất cạnh đỉnh',
+};
+
 class App {
   constructor() {
     this.size = 3;
@@ -28,7 +39,7 @@ class App {
     this._bindUI();
     this._buildNet();
     this.refresh();
-    this.setStatus('Drag to rotate. Scramble, or scan your own cube with a photo.');
+    this.setStatus('Kéo để xoay. Nhấn Xáo trộn, hoặc quét khối của bạn bằng ảnh.');
   }
 
   // ---- helpers ------------------------------------------------------------
@@ -70,7 +81,7 @@ class App {
     this.history = []; this.solution = []; this.phases = []; this.playIndex = 0;
     this._buildNet();
     this.refresh();
-    this.setStatus(`${n}×${n}×${n} cube ready.`);
+    this.setStatus(`Khối ${n}×${n}×${n} đã sẵn sàng.`);
   }
 
   async reset() {
@@ -80,7 +91,7 @@ class App {
     this.renderer.setCube(this.cube);
     this.history = []; this.solution = []; this.phases = []; this.playIndex = 0;
     this.refresh();
-    this.setStatus('Reset to a solved cube.');
+    this.setStatus('Đã đặt lại về khối đã giải.');
   }
 
   async scramble() {
@@ -89,27 +100,27 @@ class App {
     this.solution = []; this.phases = []; this.playIndex = 0;
     const seq = randomScramble(this.size, this.scrambleLength());
     this.lockControls(true); this.busy = true;
-    this.setStatus('Scrambling…');
+    this.setStatus('Đang xáo trộn…');
     for (const mv of seq) { await this.renderer.animateMove(mv, 120); this.history.push(mv); }
     this.busy = false; this.lockControls(false);
     this.refresh();
-    this.setStatus('Scrambled! Press Solve to learn the steps.');
+    this.setStatus('Đã xáo trộn! Nhấn Giải để xem các bước.');
   }
 
   solveCurrent() {
     if (this.busy) return;
-    if (this.cube.isSolved()) { this.setStatus('The cube is already solved 🎉'); return; }
-    this.setStatus('Working out the solution…');
+    if (this.cube.isSolved()) { this.setStatus('Khối đã được giải rồi 🎉'); return; }
+    this.setStatus('Đang tính lời giải…');
     // let the status paint before the (synchronous) solve
     setTimeout(() => {
       const { moves, phases } = solve(this.cube, this.history);
-      if (!moves.length) { this.setStatus('The cube is already solved 🎉'); return; }
+      if (!moves.length) { this.setStatus('Khối đã được giải rồi 🎉'); return; }
       this.solution = moves;
       this.phases = phases || [];
       this.playIndex = 0;
       this.refresh();
-      const kind = this.phases.length ? 'beginner method' : 'solution';
-      this.setStatus(`${kind}: ${moves.length} moves.${this.pace === 'manual' ? ' Press Next.' : ' Playing…'}`);
+      const kind = this.phases.length ? 'Phương pháp cơ bản' : 'Lời giải';
+      this.setStatus(`${kind}: ${moves.length} nước.${this.pace === 'manual' ? ' Nhấn Sau để đi từng bước.' : ' Đang chạy…'}`);
       if (this.pace !== 'manual') this.play();
     }, 20);
   }
@@ -125,8 +136,8 @@ class App {
       if (this.playing && this.playIndex < this.solution.length) await this.sleep(dwell);
     }
     this.playing = false;
-    if (this.cube.isSolved()) { this.history = []; this.setStatus('Solved! 🎉 Well done.'); }
-    else this.setStatus('Paused.');
+    if (this.cube.isSolved()) { this.history = []; this.setStatus('Đã giải xong! 🎉 Làm tốt lắm.'); }
+    else this.setStatus('Tạm dừng.');
     this.refresh();
   }
 
@@ -135,7 +146,7 @@ class App {
   async _advance() {
     const mv = this.solution[this.playIndex];
     this.busy = true;
-    this.setStatus(`Move ${this.playIndex + 1}/${this.solution.length}: ${mv} — ${moveName(mv)}`);
+    this.setStatus(`Nước ${this.playIndex + 1}/${this.solution.length}: ${mv} — ${moveName(mv)}`);
     await this.renderer.animateMove(mv, this.duration());
     this.history.push(mv);
     this.playIndex++;
@@ -157,7 +168,7 @@ class App {
     if (this.busy || this.playIndex >= this.solution.length) return;
     this.playing = false;
     await this._advance();
-    if (this.cube.isSolved()) { this.history = []; this.setStatus('Solved! 🎉'); this.refresh(); }
+    if (this.cube.isSolved()) { this.history = []; this.setStatus('Đã giải xong! 🎉'); this.refresh(); }
   }
 
   async stepBack() {
@@ -175,7 +186,7 @@ class App {
     if (this.cube.isSolved()) this.history = [];
     this.busy = false;
     this.refresh();
-    this.setStatus(`You turned ${token} — ${moveName(token)}`);
+    this.setStatus(`Bạn vừa xoay ${token} — ${moveName(token)}`);
   }
 
   async jumpTo(i) {
@@ -192,14 +203,14 @@ class App {
     const idx = Math.min(this.playIndex, this.solution.length - 1);
     for (let i = 0; i < this.phases.length; i++) {
       const p = this.phases[i];
-      if (idx >= p.start && idx < p.end) return `Step ${i + 1}/${this.phases.length} — ${p.name}`;
+      if (idx >= p.start && idx < p.end) return `Bước ${i + 1}/${this.phases.length} — ${PHASES_VI[p.name] || p.name}`;
     }
-    return this.playIndex >= this.solution.length ? 'Solved' : this.phases[0].name;
+    return this.playIndex >= this.solution.length ? 'Đã giải xong' : (PHASES_VI[this.phases[0].name] || this.phases[0].name);
   }
 
   refresh() {
     const play = $('#play');
-    play.textContent = this.playing ? '❚❚ Pause' : '► Play';
+    play.textContent = this.playing ? '❚❚ Dừng' : '► Chạy';
     const manual = this.pace === 'manual';
     play.toggleAttribute('disabled', this.solution.length === 0 || manual);
     play.style.opacity = manual ? 0.5 : '';
@@ -213,7 +224,7 @@ class App {
 
     const list = $('#moves');
     if (total === 0) {
-      list.innerHTML = '<span class="hint">No solution yet. Scramble or scan, then Solve.</span>';
+      list.innerHTML = '<span class="hint">Chưa có lời giải. Hãy Xáo trộn hoặc quét ảnh, rồi nhấn Giải.</span>';
     } else {
       list.innerHTML = '';
       this.solution.forEach((mv, i) => {
@@ -286,7 +297,7 @@ class App {
     // palette
     const pal = $('#palette');
     pal.innerHTML = '';
-    for (const [letter, name] of [['W', 'White'], ['Y', 'Yellow'], ['R', 'Red'], ['O', 'Orange'], ['G', 'Green'], ['B', 'Blue']]) {
+    for (const [letter, name] of [['W', 'Trắng'], ['Y', 'Vàng'], ['R', 'Đỏ'], ['O', 'Cam'], ['G', 'Xanh lá'], ['B', 'Xanh dương']]) {
       const b = document.createElement('button');
       b.className = 'swatch' + (letter === this.brush ? ' active' : '');
       b.style.background = COLORS[letter];
@@ -331,7 +342,7 @@ class App {
       const tools = document.createElement('div');
       tools.className = 'scan-tools';
       const rot = document.createElement('button');
-      rot.className = 'scan-rot'; rot.textContent = '⟲'; rot.title = 'Rotate this face';
+      rot.className = 'scan-rot'; rot.textContent = '⟲'; rot.title = 'Xoay cả mặt này';
       rot.addEventListener('click', () => {
         const g = rotateGrid(this.scanFacelets[face].slice(0, 3), 1);
         for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) this.scanFacelets[face][r][c] = g[r][c];
@@ -340,7 +351,7 @@ class App {
       const photo = document.createElement('label');
       photo.className = 'scan-photo';
       photo.textContent = '📷';
-      photo.title = 'Photo of this single face';
+      photo.title = 'Chụp riêng mặt này';
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*';
       input.style.display = 'none';
@@ -364,10 +375,10 @@ class App {
         this.scanFacelets[face][r][c] = grid[r][c];
       }
       this._paintScan();
-      $('#scanStatus').textContent = `Read the ${face} face — check the colours and fix any that look wrong.`;
+      $('#scanStatus').textContent = `Đã đọc mặt ${face} — kiểm tra và sửa lại màu nào chưa đúng.`;
       URL.revokeObjectURL(img.src);
     };
-    img.onerror = () => { $('#scanStatus').textContent = 'Could not read that image.'; };
+    img.onerror = () => { $('#scanStatus').textContent = 'Không đọc được ảnh này.'; };
     img.src = URL.createObjectURL(file);
   }
 
@@ -396,8 +407,8 @@ class App {
   // ---- quick scan: two corner photos, three faces each --------------------
 
   QUICK_STEPS = [
-    { faces: { top: 'U', left: 'F', right: 'R' }, hint: 'Photo 1 of 2 — hold WHITE up, GREEN toward you (lower-left), RED on the right, and shoot the corner. Then drag the dots onto the three faces.' },
-    { faces: { top: 'D', left: 'L', right: 'B' }, hint: 'Photo 2 of 2 — flip to the opposite corner: YELLOW on top, ORANGE on the lower-left, BLUE on the right. Then drag the dots onto the three faces.' },
+    { faces: { top: 'U', left: 'F', right: 'R' }, hint: 'Ảnh 1/2 — cầm TRẮNG ở trên, XANH LÁ hướng vào bạn (dưới-trái), ĐỎ bên phải, rồi chụp góc. Sau đó chỉnh các chấm trùm lên 3 mặt.' },
+    { faces: { top: 'D', left: 'L', right: 'B' }, hint: 'Ảnh 2/2 — lật sang góc đối diện: VÀNG ở trên, CAM ở dưới-trái, XANH DƯƠNG bên phải. Sau đó chỉnh các chấm trùm lên 3 mặt.' },
   ];
 
   startQuickScan() {
@@ -571,7 +582,13 @@ class App {
 
   _readAlign() {
     if (!this.alignImg) return;
-    const grids = sampleCornerHex(this.alignSrc, this.handles, 3);
+    let grids;
+    try {
+      grids = sampleCornerHex(this.alignSrc, this.handles, 3);
+    } catch (err) {
+      $('#scanStatus').textContent = 'Không đọc được ảnh — thử căn lại khung rồi bấm Đọc.';
+      return;
+    }
     const map = this.QUICK_STEPS[this.quickStep].faces;
     for (const [rhombus, face] of Object.entries(map)) {
       const g = grids[rhombus];
@@ -586,7 +603,9 @@ class App {
     } else {
       this._hideAlign();
       this._paintScan();
-      $('#scanStatus').textContent = 'Read both photos — check each face (use ⟲ to rotate a face) and fix any colour, then Build & Solve.';
+      const card = document.querySelector('#scanModal .modal-card');
+      if (card) card.scrollTop = 0;
+      $('#scanStatus').textContent = '✓ Đã đọc 2 ảnh. Kiểm tra từng mặt (nút ⟲ để xoay cả mặt), sửa màu nếu cần, rồi nhấn Dựng & Giải.';
     }
   }
 
@@ -602,7 +621,7 @@ class App {
     this.history = []; this.solution = []; this.phases = []; this.playIndex = 0;
     this._buildNet();
     this.closeScan();
-    if (this.cube.isSolved()) { this.refresh(); this.setStatus('That cube is already solved 🎉'); return; }
+    if (this.cube.isSolved()) { this.refresh(); this.setStatus('Khối đó đã được giải rồi 🎉'); return; }
     this.refresh();
     this.solveCurrent();
   }
