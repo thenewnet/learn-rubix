@@ -52,21 +52,36 @@ export function faceQuads(h) {
   };
 }
 
-function bilerp(a, b, c, d, u, v) {
-  const tx = a[0] + (b[0] - a[0]) * u, ty = a[1] + (b[1] - a[1]) * u;
-  const bx = d[0] + (c[0] - d[0]) * u, by = d[1] + (c[1] - d[1]) * u;
-  return [tx + (bx - tx) * v, ty + (by - ty) * v];
+// Projective map of the unit square to a quad [p0,p1,p2,p3] at the unit corners
+// (0,0),(1,0),(1,1),(0,1). Correctly handles perspective foreshortening.
+function quadMapper(p0, p1, p2, p3) {
+  const [x0, y0] = p0, [x1, y1] = p1, [x2, y2] = p2, [x3, y3] = p3;
+  const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+  const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+  let a, b, c, d, e, f, g, h;
+  if (Math.abs(dx3) < 1e-6 && Math.abs(dy3) < 1e-6) {
+    a = x1 - x0; b = x3 - x0; c = x0; d = y1 - y0; e = y3 - y0; f = y0; g = 0; h = 0;
+  } else {
+    const den = dx1 * dy2 - dx2 * dy1;
+    g = (dx3 * dy2 - dx2 * dy3) / den;
+    h = (dx1 * dy3 - dx3 * dy1) / den;
+    a = x1 - x0 + g * x1; b = x3 - x0 + h * x3; c = x0;
+    d = y1 - y0 + g * y1; e = y3 - y0 + h * y3; f = y0;
+  }
+  return (u, v) => { const w = g * u + h * v + 1; return [(a * u + b * v + c) / w, (d * u + e * v + f) / w]; };
 }
 
 function sampleQuad(ctx, quad, n) {
   const [A, B, C, D] = quad;
+  const map = quadMapper(A, B, C, D);
   const grid = [];
   for (let r = 0; r < n; r++) {
     const row = [];
     for (let c = 0; c < n; c++) {
-      const [x, y] = bilerp(A, B, C, D, (c + 0.5) / n, (r + 0.5) / n);
-      const rad = 4;
+      const [x, y] = map((c + 0.5) / n, (r + 0.5) / n);
+      const rad = 5;
       const data = ctx.getImageData(x - rad, y - rad, rad * 2, rad * 2).data;
+      // median-ish: average, which is fine for solid stickers
       let R = 0, G = 0, Bl = 0, cnt = 0;
       for (let i = 0; i < data.length; i += 4) { R += data[i]; G += data[i + 1]; Bl += data[i + 2]; cnt++; }
       row.push(classify(R / cnt, G / cnt, Bl / cnt));
@@ -117,8 +132,8 @@ export function samplePoints(h, n) {
   const q = faceQuads(h);
   const pts = { top: [], left: [], right: [] };
   for (const key of ['top', 'left', 'right']) {
-    const [A, B, C, D] = q[key];
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) pts[key].push(bilerp(A, B, C, D, (c + 0.5) / n, (r + 0.5) / n));
+    const map = quadMapper(...q[key]);
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) pts[key].push(map((c + 0.5) / n, (r + 0.5) / n));
   }
   return pts;
 }

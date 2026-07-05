@@ -428,16 +428,17 @@ class App {
     const img = new Image();
     img.onload = () => {
       const size = 340;
-      // offscreen source canvas (image only) used for sampling
+      // offscreen source canvas (whole image, contain-fit) used for sampling
       const src = document.createElement('canvas');
       src.width = size; src.height = size;
       const sctx = src.getContext('2d', { willReadFrequently: true });
-      const s = Math.min(img.naturalWidth, img.naturalHeight);
-      const sx = (img.naturalWidth - s) / 2, sy = (img.naturalHeight - s) / 2;
-      sctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+      sctx.fillStyle = '#0b0d16'; sctx.fillRect(0, 0, size, size);
+      const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+      const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+      sctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
       this.alignSrc = sctx;
       this.alignImg = true;
-      const v = hexVertices({ cx: size / 2, cy: size / 2 + 10, R: size * 0.34 });
+      const v = hexVertices({ cx: size / 2, cy: size / 2, R: size * 0.3 });
       this.handles = { T: v.T, UR: v.UR, LR: v.LR, Bo: v.Bo, LL: v.LL, UL: v.UL, Ce: v.Ce };
       $('#alignUpload').style.display = 'none';
       $('#alignRead').toggleAttribute('disabled', false);
