@@ -1,0 +1,11 @@
+{
+  "name": "learn-rubix",
+  "version": "1.0.0",
+  "description": "Learn to solve the Rubik's cube with an animated 3D step-by-step solver.",
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs",
+    "test": "node test/run.mjs"
+  },
+  "license": "MIT"
+}
