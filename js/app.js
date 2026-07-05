@@ -6,7 +6,7 @@ import { Cube, randomScramble, invertMove, moveName, FACE_MOVE_SET, FACE_LETTERS
   from './cube.js';
 import { Renderer, COLORS } from './renderer.js';
 import { solve } from './solver.js';
-import { detectGrid } from './scan.js';
+import { detectGrid, sampleCornerHex, samplePoints, hexVertices, rotateGrid } from './scan.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -275,6 +275,8 @@ class App {
     }
     this._buildScanUI();
     $('#scanStatus').textContent = '';
+    $('#scanMain').classList.remove('hidden');
+    $('#alignView').classList.add('hidden');
     $('#scanModal').classList.remove('hidden');
   }
 
@@ -326,16 +328,26 @@ class App {
       wrap.appendChild(grid);
       this.scanFacelets[face]._cells = cells;
 
-      // photo button
+      const tools = document.createElement('div');
+      tools.className = 'scan-tools';
+      const rot = document.createElement('button');
+      rot.className = 'scan-rot'; rot.textContent = '⟲'; rot.title = 'Rotate this face';
+      rot.addEventListener('click', () => {
+        const g = rotateGrid(this.scanFacelets[face].slice(0, 3), 1);
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) this.scanFacelets[face][r][c] = g[r][c];
+        this._paintScan();
+      });
       const photo = document.createElement('label');
       photo.className = 'scan-photo';
-      photo.innerHTML = '📷 Photo';
+      photo.textContent = '📷';
+      photo.title = 'Photo of this single face';
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
       input.style.display = 'none';
       input.addEventListener('change', (e) => this._onPhoto(face, e.target.files[0]));
       photo.appendChild(input);
-      wrap.appendChild(photo);
+      tools.appendChild(rot); tools.appendChild(photo);
+      wrap.appendChild(tools);
 
       net.appendChild(wrap);
     }
@@ -381,6 +393,145 @@ class App {
     $('#scanStatus').textContent = '';
   }
 
+  // ---- quick scan: two corner photos, three faces each --------------------
+
+  QUICK_STEPS = [
+    { faces: { top: 'U', left: 'F', right: 'R' }, hint: 'Photo 1 of 2 — hold WHITE up, GREEN toward you (lower-left), RED on the right, and shoot the corner. Then drag the dots onto the three faces.' },
+    { faces: { top: 'D', left: 'L', right: 'B' }, hint: 'Photo 2 of 2 — flip to the opposite corner: YELLOW on top, ORANGE on the lower-left, BLUE on the right. Then drag the dots onto the three faces.' },
+  ];
+
+  startQuickScan() {
+    this.quickStep = 0;
+    this._showAlign();
+  }
+
+  _showAlign() {
+    $('#scanMain').classList.add('hidden');
+    $('#alignView').classList.remove('hidden');
+    $('#alignHint').textContent = this.QUICK_STEPS[this.quickStep].hint;
+    $('#alignRead').toggleAttribute('disabled', true);
+    this.alignImg = null;
+    const cv = $('#alignCanvas');
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    $('#alignUpload').style.display = '';
+    $('#alignFile').value = '';
+  }
+
+  _hideAlign() {
+    $('#alignView').classList.add('hidden');
+    $('#scanMain').classList.remove('hidden');
+  }
+
+  _loadAlignPhoto(file) {
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const size = 340;
+      // offscreen source canvas (image only) used for sampling
+      const src = document.createElement('canvas');
+      src.width = size; src.height = size;
+      const sctx = src.getContext('2d', { willReadFrequently: true });
+      const s = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth - s) / 2, sy = (img.naturalHeight - s) / 2;
+      sctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+      this.alignSrc = sctx;
+      this.alignImg = true;
+      const v = hexVertices({ cx: size / 2, cy: size / 2 + 10, R: size * 0.34 });
+      this.handles = { T: v.T, UR: v.UR, LR: v.LR, Bo: v.Bo, LL: v.LL, UL: v.UL, Ce: v.Ce };
+      $('#alignUpload').style.display = 'none';
+      $('#alignRead').toggleAttribute('disabled', false);
+      this._redrawAlign();
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  }
+
+  _redrawAlign() {
+    const cv = $('#alignCanvas');
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(this.alignSrc.canvas, 0, 0);
+    const h = this.handles;
+    // rhombus edges
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2;
+    const line = (a, b) => { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
+    line(h.T, h.UR); line(h.UR, h.LR); line(h.LR, h.Bo); line(h.Bo, h.LL); line(h.LL, h.UL); line(h.UL, h.T);
+    line(h.Ce, h.T); line(h.Ce, h.UR); line(h.Ce, h.LR); line(h.Ce, h.Bo); line(h.Ce, h.LL); line(h.Ce, h.UL);
+    // sample dots
+    const pts = samplePoints(h, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    for (const key of ['top', 'left', 'right']) for (const p of pts[key]) {
+      ctx.beginPath(); ctx.arc(p[0], p[1], 3.5, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    // face labels
+    const f = this.QUICK_STEPS[this.quickStep].faces;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 15px system-ui'; ctx.textAlign = 'center';
+    const centroid = (arr) => arr.reduce((a, p) => [a[0] + p[0] / arr.length, a[1] + p[1] / arr.length], [0, 0]);
+    ctx.fillText(f.top, ...centroid([h.UL, h.T, h.UR, h.Ce]));
+    ctx.fillText(f.left, ...centroid([h.LL, h.UL, h.Ce, h.Bo]));
+    ctx.fillText(f.right, ...centroid([h.Ce, h.UR, h.LR, h.Bo]));
+    // handles
+    for (const k of Object.keys(h)) {
+      ctx.beginPath(); ctx.arc(h[k][0], h[k][1], 7, 0, 7);
+      ctx.fillStyle = k === this._dragKey ? '#6c8cff' : 'rgba(255,255,255,0.9)';
+      ctx.fill(); ctx.strokeStyle = '#14161f'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  _alignDown(e) {
+    if (!this.alignImg) return;
+    const cv = $('#alignCanvas');
+    const rect = cv.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    const x = (p.clientX - rect.left) * cv.width / rect.width;
+    const y = (p.clientY - rect.top) * cv.height / rect.height;
+    let best = null, bd = 400;
+    for (const k of Object.keys(this.handles)) {
+      const d = (this.handles[k][0] - x) ** 2 + (this.handles[k][1] - y) ** 2;
+      if (d < bd) { bd = d; best = k; }
+    }
+    this._dragKey = best;
+    if (best) this._redrawAlign();
+  }
+
+  _alignMove(e) {
+    if (!this._dragKey) return;
+    const cv = $('#alignCanvas');
+    const rect = cv.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    this.handles[this._dragKey] = [
+      (p.clientX - rect.left) * cv.width / rect.width,
+      (p.clientY - rect.top) * cv.height / rect.height,
+    ];
+    if (e.cancelable) e.preventDefault();
+    this._redrawAlign();
+  }
+
+  _alignUp() { if (this._dragKey) { this._dragKey = null; this._redrawAlign(); } }
+
+  _readAlign() {
+    if (!this.alignImg) return;
+    const grids = sampleCornerHex(this.alignSrc, this.handles, 3);
+    const map = this.QUICK_STEPS[this.quickStep].faces;
+    for (const [rhombus, face] of Object.entries(map)) {
+      const g = grids[rhombus];
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+        if (r === 1 && c === 1) continue; // keep centres fixed
+        this.scanFacelets[face][r][c] = g[r][c];
+      }
+    }
+    this.quickStep++;
+    if (this.quickStep < this.QUICK_STEPS.length) {
+      this._showAlign();
+    } else {
+      this._hideAlign();
+      this._paintScan();
+      $('#scanStatus').textContent = 'Read both photos — check each face (use ⟲ to rotate a face) and fix any colour, then Build & Solve.';
+    }
+  }
+
   scanSolve() {
     const facelets = {};
     for (const f of FACE_LETTERS) facelets[f] = this.scanFacelets[f].map((row) => row.slice());
@@ -416,6 +567,19 @@ class App {
     $('#scanClear').addEventListener('click', () => this.clearScan());
     $('#scanSolve').addEventListener('click', () => this.scanSolve());
     $('#scanModal').addEventListener('click', (e) => { if (e.target.id === 'scanModal') this.closeScan(); });
+
+    // quick scan (two corner photos)
+    $('#quickScan').addEventListener('click', () => this.startQuickScan());
+    $('#alignCancel').addEventListener('click', () => this._hideAlign());
+    $('#alignRead').addEventListener('click', () => this._readAlign());
+    $('#alignFile').addEventListener('change', (e) => this._loadAlignPhoto(e.target.files[0]));
+    const cv = $('#alignCanvas');
+    cv.addEventListener('mousedown', (e) => this._alignDown(e));
+    cv.addEventListener('touchstart', (e) => this._alignDown(e), { passive: true });
+    window.addEventListener('mousemove', (e) => this._alignMove(e));
+    window.addEventListener('touchmove', (e) => this._alignMove(e), { passive: false });
+    window.addEventListener('mouseup', () => this._alignUp());
+    window.addEventListener('touchend', () => this._alignUp());
 
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;

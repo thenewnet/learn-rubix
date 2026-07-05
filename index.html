@@ -88,19 +88,38 @@
       <div class="modal-head">
         <div>
           <h2>Enter your cube</h2>
-          <p>Hold your cube in the standard orientation, paint each sticker, or snap a photo per face. Centres are fixed.</p>
+          <p>Snap two corner photos (fastest), photograph each face, or paint the stickers. Centres are fixed — always verify the colours before solving.</p>
         </div>
         <button id="scanClose" class="ghost small" aria-label="Close">✕</button>
       </div>
 
-      <div class="palette" id="palette" aria-label="Colour palette"></div>
+      <!-- default screen: net + palette -->
+      <div id="scanMain">
+        <button id="quickScan" class="btn scan-btn">📸 Quick scan — two corner photos</button>
+        <div class="palette" id="palette" aria-label="Colour palette"></div>
+        <div id="scanNet" class="scan-net"></div>
+        <p id="scanStatus" class="scan-status"></p>
+        <div class="modal-actions">
+          <button id="scanClear" class="btn ghost">Clear</button>
+          <button id="scanSolve" class="btn accent">Build &amp; Solve</button>
+        </div>
+      </div>
 
-      <div id="scanNet" class="scan-net"></div>
-
-      <p id="scanStatus" class="scan-status"></p>
-      <div class="modal-actions">
-        <button id="scanClear" class="btn ghost">Clear</button>
-        <button id="scanSolve" class="btn accent">Build &amp; Solve</button>
+      <!-- alignment screen: shown while reading a corner photo -->
+      <div id="alignView" class="align hidden">
+        <p id="alignHint" class="align-hint"></p>
+        <div class="align-stage">
+          <canvas id="alignCanvas" width="340" height="340"></canvas>
+          <label class="align-upload" id="alignUpload">
+            <span>Tap to choose a photo</span>
+            <input id="alignFile" type="file" accept="image/*" capture="environment" hidden />
+          </label>
+        </div>
+        <p class="align-tip">Drag the dots so the grid sits on your three faces, then read the colours.</p>
+        <div class="modal-actions">
+          <button id="alignCancel" class="btn ghost">Cancel</button>
+          <button id="alignRead" class="btn accent" disabled>Read these 3 faces ▶</button>
+        </div>
       </div>
     </div>
   </div>

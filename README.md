@@ -10,9 +10,13 @@ animated, labelled turn at a time, at your own pace.
 
 - **Animated 3D cube** rendered with pure CSS 3D transforms — no libraries, works
   fully offline. Drag to rotate and look at any face.
-- **Solve from a photo** 📷 — snap a picture of each face (or paint the stickers by
-  hand), and the app reconstructs your exact cube in 3D and teaches you how to
-  solve *that* cube.
+- **Solve from a photo** 📷 — a single photo can only show three faces, so the
+  fastest capture is a **two-corner quick scan**: shoot one corner (top/front/right)
+  and the opposite corner (down/left/back), drag the frame onto each cube, and it
+  reads all six faces. You can also photograph faces one at a time or paint the
+  stickers. Colours are auto-detected as an assist — **always verify them** (the
+  app refuses to solve an impossible cube) — then it reconstructs your exact cube
+  in 3D and teaches you how to solve *that* cube.
 - **Real step-by-step method** — 3×3 cubes are solved with the layer-by-layer
   beginner method, split into readable phases you can learn:
   *Bottom cross → Bottom corners → Middle layer → Top cross → Orient top corners →
