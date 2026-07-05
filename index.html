@@ -115,7 +115,16 @@
             <input id="alignFile" type="file" accept="image/*" hidden />
           </label>
         </div>
-        <p class="align-tip">Drag the dots so the grid sits on your three faces, then read the colours.</p>
+        <div class="align-controls">
+          <label for="alignZoom">Zoom</label>
+          <input id="alignZoom" type="range" min="0.4" max="3" step="0.02" value="1" />
+          <span></span>
+          <label for="alignRotate">Rotate</label>
+          <input id="alignRotate" type="range" min="-180" max="180" step="1" value="0" />
+          <span></span>
+          <button id="alignReset" class="ghost small reset">Reset photo</button>
+        </div>
+        <p class="align-tip">Drag the photo to move it, pinch or use the sliders to zoom / rotate it into the frame — then nudge the white dots onto your three faces.</p>
         <div class="modal-actions">
           <button id="alignCancel" class="btn ghost">Cancel</button>
           <button id="alignRead" class="btn accent" disabled>Read these 3 faces ▶</button>

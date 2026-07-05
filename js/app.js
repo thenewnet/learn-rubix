@@ -411,11 +411,13 @@ class App {
     $('#alignHint').textContent = this.QUICK_STEPS[this.quickStep].hint;
     $('#alignRead').toggleAttribute('disabled', true);
     this.alignImg = null;
+    this._dragKey = null; this._panning = false; this._pinch = null;
     const cv = $('#alignCanvas');
     const ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, cv.width, cv.height);
     $('#alignUpload').style.display = '';
     $('#alignFile').value = '';
+    $('#alignZoom').value = 1; $('#alignRotate').value = 0;
   }
 
   _hideAlign() {
@@ -428,24 +430,56 @@ class App {
     const img = new Image();
     img.onload = () => {
       const size = 340;
-      // offscreen source canvas (whole image, contain-fit) used for sampling
       const src = document.createElement('canvas');
       src.width = size; src.height = size;
-      const sctx = src.getContext('2d', { willReadFrequently: true });
-      sctx.fillStyle = '#0b0d16'; sctx.fillRect(0, 0, size, size);
-      const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
-      const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
-      sctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-      this.alignSrc = sctx;
+      this.alignSrc = src.getContext('2d', { willReadFrequently: true });
+      this.alignImage = img;
+      this.imgT = { scale: 1, angle: 0, tx: 0, ty: 0 }; // pan / zoom / rotate
+      $('#alignZoom').value = 1; $('#alignRotate').value = 0;
       this.alignImg = true;
       const v = hexVertices({ cx: size / 2, cy: size / 2, R: size * 0.3 });
       this.handles = { T: v.T, UR: v.UR, LR: v.LR, Bo: v.Bo, LL: v.LL, UL: v.UL, Ce: v.Ce };
       $('#alignUpload').style.display = 'none';
       $('#alignRead').toggleAttribute('disabled', false);
+      this._drawSource();
       this._redrawAlign();
       URL.revokeObjectURL(img.src);
     };
     img.src = URL.createObjectURL(file);
+  }
+
+  // Draw the photo into the (offscreen) sampling canvas with the current
+  // pan/zoom/rotate transform, so sampling reads exactly what the user sees.
+  _drawSource() {
+    const size = 340;
+    const ctx = this.alignSrc;
+    const img = this.alignImage;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#0b0d16'; ctx.fillRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(size / 2 + this.imgT.tx, size / 2 + this.imgT.ty);
+    ctx.rotate(this.imgT.angle);
+    ctx.scale(this.imgT.scale, this.imgT.scale);
+    const s0 = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+    const w = img.naturalWidth * s0, h = img.naturalHeight * s0;
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+
+  _setZoom(v) { if (!this.alignImg) return; this.imgT.scale = v; this._drawSource(); this._redrawAlign(); }
+  _setRotate(deg) { if (!this.alignImg) return; this.imgT.angle = deg * Math.PI / 180; this._drawSource(); this._redrawAlign(); }
+  _resetPhoto() {
+    if (!this.alignImg) return;
+    this.imgT = { scale: 1, angle: 0, tx: 0, ty: 0 };
+    $('#alignZoom').value = 1; $('#alignRotate').value = 0;
+    this._drawSource(); this._redrawAlign();
+  }
+
+  _canvasXY(e) {
+    const cv = $('#alignCanvas');
+    const rect = cv.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: (p.clientX - rect.left) * cv.width / rect.width, y: (p.clientY - rect.top) * cv.height / rect.height };
   }
 
   _redrawAlign() {
@@ -483,34 +517,57 @@ class App {
 
   _alignDown(e) {
     if (!this.alignImg) return;
-    const cv = $('#alignCanvas');
-    const rect = cv.getBoundingClientRect();
-    const p = e.touches ? e.touches[0] : e;
-    const x = (p.clientX - rect.left) * cv.width / rect.width;
-    const y = (p.clientY - rect.top) * cv.height / rect.height;
-    let best = null, bd = 400;
+    if (e.touches && e.touches.length === 2) { this._startPinch(e); return; }
+    const { x, y } = this._canvasXY(e);
+    let best = null, bd = 26 * 26; // grab a handle if close, else pan the photo
     for (const k of Object.keys(this.handles)) {
       const d = (this.handles[k][0] - x) ** 2 + (this.handles[k][1] - y) ** 2;
       if (d < bd) { bd = d; best = k; }
     }
-    this._dragKey = best;
-    if (best) this._redrawAlign();
+    if (best) { this._dragKey = best; this._panning = false; this._redrawAlign(); }
+    else { this._dragKey = null; this._panning = true; this._panStart = { x, y, tx: this.imgT.tx, ty: this.imgT.ty }; }
   }
 
   _alignMove(e) {
-    if (!this._dragKey) return;
-    const cv = $('#alignCanvas');
-    const rect = cv.getBoundingClientRect();
-    const p = e.touches ? e.touches[0] : e;
-    this.handles[this._dragKey] = [
-      (p.clientX - rect.left) * cv.width / rect.width,
-      (p.clientY - rect.top) * cv.height / rect.height,
-    ];
-    if (e.cancelable) e.preventDefault();
-    this._redrawAlign();
+    if (!this.alignImg) return;
+    if (e.touches && e.touches.length === 2 && this._pinch) { this._updatePinch(e); return; }
+    if (this._dragKey) {
+      this.handles[this._dragKey] = [this._canvasXY(e).x, this._canvasXY(e).y];
+      if (e.cancelable) e.preventDefault();
+      this._redrawAlign();
+    } else if (this._panning) {
+      const { x, y } = this._canvasXY(e);
+      this.imgT.tx = this._panStart.tx + (x - this._panStart.x);
+      this.imgT.ty = this._panStart.ty + (y - this._panStart.y);
+      if (e.cancelable) e.preventDefault();
+      this._drawSource(); this._redrawAlign();
+    }
   }
 
-  _alignUp() { if (this._dragKey) { this._dragKey = null; this._redrawAlign(); } }
+  _alignUp() {
+    const was = this._dragKey;
+    this._dragKey = null; this._panning = false; this._pinch = null;
+    if (was) this._redrawAlign();
+  }
+
+  _startPinch(e) {
+    const [a, b] = [e.touches[0], e.touches[1]];
+    const dx = b.clientX - a.clientX, dy = b.clientY - a.clientY;
+    this._pinch = { d0: Math.hypot(dx, dy) || 1, ang0: Math.atan2(dy, dx), scale0: this.imgT.scale, angle0: this.imgT.angle };
+    this._panning = false; this._dragKey = null;
+  }
+
+  _updatePinch(e) {
+    const [a, b] = [e.touches[0], e.touches[1]];
+    const dx = b.clientX - a.clientX, dy = b.clientY - a.clientY;
+    const d = Math.hypot(dx, dy), ang = Math.atan2(dy, dx);
+    this.imgT.scale = Math.max(0.4, Math.min(3, this._pinch.scale0 * d / this._pinch.d0));
+    this.imgT.angle = this._pinch.angle0 + (ang - this._pinch.ang0);
+    $('#alignZoom').value = this.imgT.scale;
+    $('#alignRotate').value = Math.round(((this.imgT.angle * 180 / Math.PI + 180) % 360 + 360) % 360 - 180);
+    if (e.cancelable) e.preventDefault();
+    this._drawSource(); this._redrawAlign();
+  }
 
   _readAlign() {
     if (!this.alignImg) return;
@@ -574,6 +631,9 @@ class App {
     $('#alignCancel').addEventListener('click', () => this._hideAlign());
     $('#alignRead').addEventListener('click', () => this._readAlign());
     $('#alignFile').addEventListener('change', (e) => this._loadAlignPhoto(e.target.files[0]));
+    $('#alignZoom').addEventListener('input', (e) => this._setZoom(Number(e.target.value)));
+    $('#alignRotate').addEventListener('input', (e) => this._setRotate(Number(e.target.value)));
+    $('#alignReset').addEventListener('click', () => this._resetPhoto());
     const cv = $('#alignCanvas');
     cv.addEventListener('mousedown', (e) => this._alignDown(e));
     cv.addEventListener('touchstart', (e) => this._alignDown(e), { passive: true });

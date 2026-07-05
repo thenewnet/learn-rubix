@@ -332,7 +332,19 @@ input[type="range"] { flex: 1; accent-color: var(--accent); }
 .scan-photo:hover, .scan-rot:hover { background: rgba(255, 255, 255, 0.14); }
 
 /* ---------- align (quick corner-photo) view ---------- */
+.hidden { display: none !important; }
 .align.hidden { display: none; }
+.align-controls {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px 10px;
+  align-items: center;
+  max-width: 340px;
+  margin: 10px auto 2px;
+}
+.align-controls label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.align-controls input[type="range"] { width: 100%; accent-color: var(--accent); }
+.align-controls .reset { grid-column: 1 / -1; justify-self: center; }
 .align-hint { font-size: 13.5px; color: var(--text); margin: 0 0 12px; line-height: 1.5; }
 .align-stage {
   position: relative; width: 340px; max-width: 100%; margin: 0 auto;
