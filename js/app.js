@@ -342,7 +342,7 @@ class App {
       photo.textContent = '📷';
       photo.title = 'Photo of this single face';
       const input = document.createElement('input');
-      input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
+      input.type = 'file'; input.accept = 'image/*';
       input.style.display = 'none';
       input.addEventListener('change', (e) => this._onPhoto(face, e.target.files[0]));
       photo.appendChild(input);
