@@ -1,8 +1,8 @@
 # Learn Rubix 🧊
 
 A tiny, modern web app for **learning to solve the Rubik's cube**. Scramble the
-cube, press **Solve**, and watch it solve itself one animated turn at a time — so
-you can follow (and learn) every move.
+cube — or **scan your own real cube from photos** — then watch it solve itself one
+animated, labelled turn at a time, at your own pace.
 
 ![Learn Rubix](assets/preview.png)
 
@@ -10,23 +10,34 @@ you can follow (and learn) every move.
 
 - **Animated 3D cube** rendered with pure CSS 3D transforms — no libraries, works
   fully offline. Drag to rotate and look at any face.
-- **Configurable size** — 2×2, 3×3, 4×4 and 5×5 from the settings dropdown.
-- **Step-by-step solving** with play / pause, previous / next, a scrubbable move
-  list, and an adjustable speed. Click any move in the list to jump to it.
-- **Live 2D unfolded map** that stays in sync with the 3D cube.
-- **Keyboard turns** — press `U R F D L B` to turn a face (`Shift` for
-  counter-clockwise) to practise the notation yourself.
+- **Solve from a photo** 📷 — snap a picture of each face (or paint the stickers by
+  hand), and the app reconstructs your exact cube in 3D and teaches you how to
+  solve *that* cube.
+- **Real step-by-step method** — 3×3 cubes are solved with the layer-by-layer
+  beginner method, split into readable phases you can learn:
+  *Bottom cross → Bottom corners → Middle layer → Top cross → Orient top corners →
+  Place top corners → Finish top edges.*
+- **Your pace** — step through manually with Prev / Next, or auto-play every
+  0.9–3.2 seconds per move. Click any move in the list to jump to it.
+- **Configurable size** — 2×2, 3×3, 4×4 and 5×5.
+- **Live 2D unfolded map** that stays in sync with the 3D cube, plus keyboard
+  turns (`U R F D L B`, `Shift` = counter-clockwise) to practise the notation.
 
 ## How it works
 
-The cube is a single physical model: every cubie carries an integer position and
-an integer orientation matrix, and that *same* model drives both the solver logic
-and the 3D renderer, so they can never drift out of sync.
+Every cubie is a single physical object carrying an integer position and an
+integer orientation matrix. That *same* model drives the solver logic and the 3D
+renderer, so they can never drift out of sync.
 
-Because the app only ever changes the cube through recorded moves, the inverse of
-the (simplified) move history is always a valid, redundancy-free sequence of real
-face turns that returns the cube to solved — the exact steps you watch animate.
-This is correct for every cube size and never produces an invalid solution.
+- **Photo → cube.** Each scanned face gives nine sticker colours (classified from
+  the photo in HSV, then confirmed/corrected by you). The 54 stickers are validated
+  and reconstructed into the exact physical cube, which is then displayed and solved.
+- **The solver.** 3×3 cubes are solved from *any* valid state with a real
+  layer-by-layer method: the bottom cross is found optimally from a precomputed
+  distance table, and every later step simulates a small set of candidate
+  maneuvers and keeps only ones that provably make progress while preserving the
+  pieces already solved. This is verified over thousands of random states (see
+  the tests). Other sizes are solved by inverting the recorded move history.
 
 ## Run it
 
@@ -45,19 +56,25 @@ Then open <http://localhost:8000>.
 npm test
 ```
 
-Covers the move engine (every turn is a real face turn, `move⁴ = identity`,
-inverses, the "sexy move" identity) and end-to-end solving (1600 random scrambles
-across all sizes each solve back to a solved cube).
+- **moves** — every turn is a real face turn (`move⁴ = identity`, inverses, the
+  "sexy move" identity, standard `U`/`R`/`F` behaviour).
+- **solver** — history-inverse solves round-trip for every size.
+- **lbl** — 800 random 3×3 states all solve back to solved (run
+  `LBL_TRIALS=5000 node test/lbl.test.mjs` for a heavier pass).
+- **reconstruct** — reading a cube's stickers and rebuilding it round-trips exactly
+  and stays solvable; invalid sticker sets are rejected.
 
 ## Project layout
 
 ```
-index.html        markup + layout
+index.html        markup + layout + scan modal
 styles.css        modern dark UI
-js/cube.js        physical cube model, moves, scramble, net reader
+js/cube.js        physical model, moves, scramble, net, reconstruction
+js/lbl.js         layer-by-layer 3x3 solver (any state) + cross BFS table
+js/solver.js      solve dispatcher
 js/renderer.js    CSS-3D rendering + animated face turns
-js/solver.js      solution generation
-js/app.js         UI, playback controls, settings, keyboard
+js/scan.js        photo → sticker-colour detection
+js/app.js         UI, playback, pace, scan modal, keyboard
 serve.mjs         tiny static server
 test/             node test suite
 ```
@@ -67,7 +84,9 @@ test/             node test suite
 | Action | How |
 | --- | --- |
 | Rotate the view | drag the cube |
-| Turn a face | click **Scramble/Solve** or press `U R F D L B` (`Shift` = prime) |
-| Play / pause solve | **Play** button or `Space` |
-| Step through | **◀ / ▶** buttons, or click a move chip |
+| Turn a face | press `U R F D L B` (`Shift` = counter-clockwise) |
+| Solve your own cube | **Solve from a photo of your cube** → scan / paint → Build & Solve |
+| Play / pause | **Play** button or `Space` |
+| Step through | **◀ Prev / Next ▶**, arrow keys, or click a move chip |
+| Playback pace | the **Pace** dropdown (Manual, or 0.9–3.2 s per move) |
 | Change size | the **Cube** dropdown |

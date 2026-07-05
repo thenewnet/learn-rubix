@@ -52,14 +52,15 @@ const ROT = {
 const AXIS_INDEX = { x: 0, y: 1, z: 2 };
 
 // Each face: which axis, sign of the outer layer, and the clockwise-turn matrix
-// (clockwise as seen from outside the cube looking in).
+// (clockwise as seen from outside the cube looking in). Signs chosen so that the
+// move labels match standard cube notation, e.g. R lifts the front-right edge up.
 const FACES = {
-  U: { axis: 'y', sign: -1, mat: ROT.y[1] },
-  D: { axis: 'y', sign: 1, mat: ROT.y['-1'] },
-  R: { axis: 'x', sign: 1, mat: ROT.x['-1'] },
-  L: { axis: 'x', sign: -1, mat: ROT.x[1] },
-  F: { axis: 'z', sign: 1, mat: ROT.z['-1'] },
-  B: { axis: 'z', sign: -1, mat: ROT.z[1] },
+  U: { axis: 'y', sign: -1, mat: ROT.y['-1'] },
+  D: { axis: 'y', sign: 1, mat: ROT.y[1] },
+  R: { axis: 'x', sign: 1, mat: ROT.x[1] },
+  L: { axis: 'x', sign: -1, mat: ROT.x['-1'] },
+  F: { axis: 'z', sign: 1, mat: ROT.z[1] },
+  B: { axis: 'z', sign: -1, mat: ROT.z['-1'] },
 };
 
 export const FACE_LETTERS = ['U', 'D', 'R', 'L', 'F', 'B'];
@@ -274,6 +275,104 @@ const NET_ORIENT = {
   L: { rowAxis: 'y', rowDir: -1, colAxis: 'z', colDir: -1 },
   R: { rowAxis: 'y', rowDir: -1, colAxis: 'z', colDir: 1 },
 };
+
+// ----- reconstruct a cube from scanned/edited sticker colors ---------------
+
+// The 24 orientation-preserving rotations of a cube (integer matrices).
+const ROTATIONS = (() => {
+  const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+  const out = [];
+  for (const p of perms) {
+    for (let s = 0; s < 8; s++) {
+      const sign = [(s & 1) ? -1 : 1, (s & 2) ? -1 : 1, (s & 4) ? -1 : 1];
+      const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+      for (let i = 0; i < 3; i++) M[i][p[i]] = sign[i];
+      const det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+        - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+        + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+      if (det === 1) out.push(M);
+    }
+  }
+  return out;
+})();
+
+// Map a facelet (face + row/col) to its 3D slot position and outward normal.
+function faceletTarget(face, r, c, n) {
+  const spec = FACES[face];
+  const max = n - 1;
+  const coords = [];
+  for (let p = 0; p < n; p++) coords.push(2 * p - (n - 1));
+  const { rowAxis, rowDir, colAxis, colDir } = NET_ORIENT[face];
+  const pos = [0, 0, 0];
+  pos[AXIS_INDEX[spec.axis]] = spec.sign * max;
+  pos[AXIS_INDEX[rowAxis]] = rowDir * coords[r];
+  pos[AXIS_INDEX[colAxis]] = colDir * coords[c];
+  return { pos, normal: FACE_NORMAL[face] };
+}
+
+// Build a Cube from a facelet map { U:[[...]], R:[[...]], ... } of colour letters.
+// Returns the Cube, or null if the stickers cannot form a physical cube.
+export function buildFromFacelets(n, facelets) {
+  const cube = new Cube(n);
+  const targets = new Map();
+  for (const face of FACE_LETTERS) {
+    const grid = facelets[face];
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const { pos, normal } = faceletTarget(face, r, c, n);
+        const pk = pos.join(',');
+        if (!targets.has(pk)) targets.set(pk, { pos, faces: [] });
+        targets.get(pk).faces.push({ normal, color: grid[r][c] });
+      }
+    }
+  }
+  const home = cube.cubies.map((cu) => ({
+    cu, colors: cu.stickers.map((s) => s.color).slice().sort().join(''),
+  }));
+  const used = new Set();
+  for (const [, t] of targets) {
+    const colorSet = t.faces.map((f) => f.color).slice().sort().join('');
+    const cand = home.find((h) => h.colors === colorSet && !used.has(h.cu.id));
+    if (!cand) return null;
+    let found = null;
+    for (const o of ROTATIONS) {
+      let ok = true;
+      for (const s of cand.cu.stickers) {
+        const wn = matVec(o, s.hn);
+        const tf = t.faces.find((f) => f.color === s.color);
+        if (!tf || !vecEq(wn, tf.normal)) { ok = false; break; }
+      }
+      if (ok) { found = o; break; }
+    }
+    if (!found) return null;
+    used.add(cand.cu.id);
+    cand.cu.pos = t.pos.slice();
+    cand.cu.o = found;
+  }
+  return cube;
+}
+
+// Validate a facelet map. Returns { ok, reason } or { ok:true, cube }.
+export function validateFacelets(n, facelets) {
+  const counts = {};
+  for (const f of FACE_LETTERS) {
+    for (const row of facelets[f]) {
+      for (const col of row) {
+        if (!col) return { ok: false, reason: 'Some stickers still need a colour.' };
+        counts[col] = (counts[col] || 0) + 1;
+      }
+    }
+  }
+  for (const k of Object.keys(counts)) {
+    if (counts[k] !== n * n) return { ok: false, reason: `Colour “${k}” is used ${counts[k]}× — each colour needs exactly ${n * n}.` };
+  }
+  const mid = Math.floor(n / 2);
+  const centers = FACE_LETTERS.map((f) => facelets[f][mid][mid]);
+  if (new Set(centers).size !== 6) return { ok: false, reason: 'The six centre colours must all be different.' };
+  const cube = buildFromFacelets(n, facelets);
+  if (!cube) return { ok: false, reason: 'These stickers don’t form a real cube — re-check the colours.' };
+  return { ok: true, cube };
+}
 
 // ----- move utilities ------------------------------------------------------
 

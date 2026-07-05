@@ -1,26 +1,28 @@
-// solver.js — produces a correct, animatable sequence of face turns that solves
-// the current cube.
+// solver.js — produces a correct, animatable solution for the current cube.
 //
-// The application only ever changes the cube through recorded moves, so the
-// inverse of the move history (simplified to cancel redundant turns) is always a
-// valid, minimal-ish solution of real face turns for the current state. This is
-// robust for every cube size and never yields an invalid solve. Move labels are
-// grouped so the UI can present readable, learnable steps.
+// 3x3 cubes are solved with the real layer-by-layer method (js/lbl.js), which
+// works from ANY valid state (including one reconstructed from a photo) and comes
+// with human-readable phase labels for step-by-step learning.
+//
+// Other sizes are solved by inverting the recorded move history (always valid for
+// states the app itself produced).
 
 import { invertSequence, simplify } from './cube.js';
+import { solveCube } from './lbl.js';
 
-// Return the list of moves that solves the cube given its move history.
+// Solve the given cube. `history` is only used as a fallback for non-3x3 sizes.
+// Returns { moves, phases } where phases is [] when not applicable.
+export function solve(cube, history) {
+  if (cube.n === 3) {
+    const { moves, phases, success } = solveCube(cube);
+    if (success) return { moves, phases };
+    // extremely defensive fallback (should not happen for valid states)
+    return { moves: solveFromHistory(history), phases: [] };
+  }
+  return { moves: solveFromHistory(history), phases: [] };
+}
+
 export function solveFromHistory(history) {
   const net = simplify(history.slice());
   return simplify(invertSequence(net));
-}
-
-// Break a flat solution into readable, bite-sized groups for step-through
-// learning (e.g. rows of ~5 moves).
-export function groupSolution(moves, size = 5) {
-  const groups = [];
-  for (let i = 0; i < moves.length; i += size) {
-    groups.push(moves.slice(i, i + size));
-  }
-  return groups;
 }

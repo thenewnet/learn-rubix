@@ -32,14 +32,32 @@ for (const f of ['U', 'D', 'R', 'L', 'F', 'B']) {
   ok(c.isSolved(), 'sexy move x6 == identity');
 }
 
-// A single U should move the front-top edge to the right-top edge (real face turn).
+// A clockwise U carries the front-top edge toward the LEFT face (standard U).
 {
   const c = new Cube(3);
   // front-top edge sticker facing F is green at pos (0,-2,2)
   const before = c.colorAt([0, -2, 2], [0, 0, 1]);
   c.applyMove('U');
-  const afterRight = c.colorAt([2, -2, 0], [1, 0, 0]); // now facing R
-  ok(before === 'G' && afterRight === 'G', 'U carries front-top green sticker toward the right face');
+  const afterLeft = c.colorAt([-2, -2, 0], [-1, 0, 0]); // now facing L
+  ok(before === 'G' && afterLeft === 'G', 'U carries front-top green sticker toward the left face');
+}
+
+// A clockwise R lifts the front-right edge up to the top (standard R).
+{
+  const c = new Cube(3);
+  const before = c.colorAt([2, 0, 2], [0, 0, 1]); // FR edge, F sticker (green)
+  c.applyMove('R');
+  const afterTop = c.colorAt([2, -2, 0], [0, -1, 0]); // now at UR facing U
+  ok(before === 'G' && afterTop === 'G', 'R lifts the front-right edge to the top');
+}
+
+// A clockwise F moves the top-front edge to the right (standard F).
+{
+  const c = new Cube(3);
+  const before = c.colorAt([0, -2, 2], [0, 0, 1]); // UF edge, F sticker (green)
+  c.applyMove('F');
+  const afterRight = c.colorAt([2, 0, 2], [0, 0, 1]); // now at FR facing F
+  ok(before === 'G' && afterRight === 'G', 'F moves the top-front edge to the right');
 }
 
 // Scramble then exact inverse returns to solved (any size).
