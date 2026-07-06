@@ -6,7 +6,7 @@ import { Cube, randomScramble, invertMove, moveName, FACE_MOVE_SET, FACE_LETTERS
   from './cube.js';
 import { Renderer, COLORS } from './renderer.js';
 import { solve } from './solver.js';
-import { detectGrid, sampleCornerHex, samplePoints, hexVertices, rotateGrid } from './scan.js';
+import { detectGrid, sampleCornerHex, samplePoints, hexVertices, rotateGrid, autoFitHex } from './scan.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -448,11 +448,13 @@ class App {
       this.imgT = { scale: 1, angle: 0, tx: 0, ty: 0 }; // pan / zoom / rotate
       $('#alignZoom').value = 1; $('#alignRotate').value = 0;
       this.alignImg = true;
-      const v = hexVertices({ cx: size / 2, cy: size / 2, R: size * 0.3 });
+      this._drawSource();
+      // try to locate the cube automatically; fall back to a centred frame
+      const auto = autoFitHex(this.alignSrc, size);
+      const v = auto || hexVertices({ cx: size / 2, cy: size / 2, R: size * 0.3 });
       this.handles = { T: v.T, UR: v.UR, LR: v.LR, Bo: v.Bo, LL: v.LL, UL: v.UL, Ce: v.Ce };
       $('#alignUpload').style.display = 'none';
       $('#alignRead').toggleAttribute('disabled', false);
-      this._drawSource();
       this._redrawAlign();
       URL.revokeObjectURL(img.src);
     };
@@ -483,7 +485,17 @@ class App {
     if (!this.alignImg) return;
     this.imgT = { scale: 1, angle: 0, tx: 0, ty: 0 };
     $('#alignZoom').value = 1; $('#alignRotate').value = 0;
-    this._drawSource(); this._redrawAlign();
+    this._drawSource();
+    this._autoFit();
+  }
+
+  // Re-run automatic cube detection on the current (possibly zoomed) photo.
+  _autoFit() {
+    if (!this.alignImg) return;
+    const auto = autoFitHex(this.alignSrc, 340);
+    if (auto) { this.handles = auto; $('#scanStatus').textContent = ''; }
+    else $('#alignHint').textContent = 'Không tự tìm được khối — hãy phóng to/kéo cho khối vừa khung rồi chỉnh các chấm.';
+    this._redrawAlign();
   }
 
   _canvasXY(e) {
@@ -653,6 +665,7 @@ class App {
     $('#alignZoom').addEventListener('input', (e) => this._setZoom(Number(e.target.value)));
     $('#alignRotate').addEventListener('input', (e) => this._setRotate(Number(e.target.value)));
     $('#alignReset').addEventListener('click', () => this._resetPhoto());
+    $('#alignAuto').addEventListener('click', () => this._autoFit());
     const cv = $('#alignCanvas');
     cv.addEventListener('mousedown', (e) => this._alignDown(e));
     cv.addEventListener('touchstart', (e) => this._alignDown(e), { passive: true });

@@ -119,6 +119,58 @@ export function imageToCtx(img, size) {
   return ctx;
 }
 
+// Try to locate the cube in the photo automatically and return a starting
+// hexagon frame. Works by finding the largest blob of vivid (saturated) pixels
+// — i.e. the coloured cube — and fitting a hexagon to it. Returns null if it
+// can't find a confident blob (then the caller keeps the default centred frame).
+export function autoFitHex(ctx, size) {
+  const G = 72;                     // coarse grid for speed + noise immunity
+  const cell = size / G;
+  const data = ctx.getImageData(0, 0, size, size).data;
+  const vivid = new Uint8Array(G * G);
+  for (let gy = 0; gy < G; gy++) {
+    for (let gx = 0; gx < G; gx++) {
+      const x = Math.min(size - 1, Math.floor((gx + 0.5) * cell));
+      const y = Math.min(size - 1, Math.floor((gy + 0.5) * cell));
+      const i = (y * size + x) * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const s = mx === 0 ? 0 : (mx - mn) / mx, v = mx / 255;
+      if (s > 0.33 && v > 0.22) vivid[gy * G + gx] = 1;
+    }
+  }
+  // largest 4-connected component of vivid cells
+  const seen = new Uint8Array(G * G);
+  let best = [], bestN = 0;
+  for (let start = 0; start < G * G; start++) {
+    if (!vivid[start] || seen[start]) continue;
+    const q = [start]; seen[start] = 1; const comp = [start];
+    for (let h = 0; h < q.length; h++) {
+      const cur = q[h], cx = cur % G, cy = (cur / G) | 0;
+      const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [dx, dy] of nb) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || nx >= G || ny < 0 || ny >= G) continue;
+        const ni = ny * G + nx;
+        if (vivid[ni] && !seen[ni]) { seen[ni] = 1; q.push(ni); comp.push(ni); }
+      }
+    }
+    if (comp.length > bestN) { bestN = comp.length; best = comp; }
+  }
+  if (bestN < 24) return null;
+  let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+  for (const c of best) {
+    const px = ((c % G) + 0.5) * cell, py = (((c / G) | 0) + 0.5) * cell;
+    if (px < minX) minX = px; if (px > maxX) maxX = px;
+    if (py < minY) minY = py; if (py > maxY) maxY = py;
+  }
+  const w = maxX - minX, h = maxY - minY;
+  if (w < size * 0.12 || h < size * 0.12) return null;
+  // hexagon height ≈ 2R, width ≈ √3 R; fit to the blob and clamp
+  const R = Math.min(size * 0.49, Math.max(h * 0.52, w / 1.7));
+  return hexVertices({ cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, R });
+}
+
 // Sample the three rhombi of a corner view. Returns { top, left, right } grids.
 export function sampleCorner(ctx, params, n) {
   return sampleCornerHex(ctx, hexVertices(params), n);
